@@ -16,7 +16,6 @@ def removehtml(text,htmltag):
 
 def sendtoline(key,i="資料有錯誤.請檢查資料謝謝"):
 	print(i)
-	return True
 	try:
 		sendheaders = {
 		"Authorization": "Bearer " + key,
