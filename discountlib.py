@@ -43,10 +43,23 @@ def pchome(url):
 		else:
 			return price
 
+def pchomemulti(url):
+	global pchomesession
+	id =  list(i.split("?")[0].split("/")[-1] for i in url)
+	data = {}
+	for i in range(0,len(id),1000):
+		text =  pchomesession.get("https://ecapi.pchome.com.tw/ecshop/prodapi/v2/prod?id=%s&fields=Price,Discount,ShipType,Qty&_callback=jsonpcb_prod"%(",".join(id[0+i:i+1000])),headers=headers).text
+		top = text.index("jsonpcb_prod(")
+		last = text.index(");}catch(e){if(window.console){console.log(e);}}",top)
+		data = {**data, **json.loads(text[top+len("jsonpcb_prod("):last])}
+	return data
+
 def momo(url):
 	id = url.split("i_code=")[1]
 	text = requests.get("https://m.momoshop.com.tw/goods.momo?i_code=%s"%id,headers=headers).text
-	momotop = text.index("<META property=\"product:price:amount\" content=\"")
+	momotop = text.find("<META property=\"product:price:amount\" content=\"")
+	if momotop == -1:
+		return "未販售"
 	momolast = text.index("\">",momotop)
 	price = int(text[momotop:momolast].split("content=\"")[1].replace(",",""))
 	print(str(price),end = " ")
@@ -66,6 +79,15 @@ def momosearch(key):
 		result[tid] = i.select("a")[tag].attrs
 	return result
 
+def pchomeseatch(key):
+	global pchomesession
+	req =  pchomesession.get("https://ecshweb.pchome.com.tw/search/v3.3/all/results?q=%s&page=1&sort=sale/dc"%key,headers=headers)
+	print("search:",key,req)
+	data = {}
+	for i in json.loads(req.text)["prods"]:
+		data[i["Id"]] = i
+	return data
+	
 def intervalcheck(data,i,lineid,sendtext): #判斷是否發訊息,並回傳存入至db的值
 	if  data["intervalarr"].get(i) == None:
 		data["intervalarr"][i] = 0
