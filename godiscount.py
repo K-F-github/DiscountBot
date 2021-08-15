@@ -126,6 +126,7 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 	searchproductpchome = {}
 	pchomeprod = {}
 	momoproduct = {}
+	uniqliprod = {}
 	for i in r.db("line_notify_funny").table("data").run(conn):
 		for j in i["product"]:
 			temp = i.copy()
@@ -138,6 +139,10 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 				if j[1] not in momoproduct.keys():
 					momoproduct[j[1]]=[]
 				momoproduct[j[1]].append(temp)
+			if "https://www.uniqlo.com/tw/store/goods/" in j[1]:
+				if j[1] not in uniqliprod.keys():
+					uniqliprod[j[1]]=[]
+				uniqliprod[j[1]].append(temp)
 		for j in i["searchproduct"]:
 			if j[1] not in searchproductmomo.keys() and j[0] == "searchmomo":
 				searchproductmomo[j[1]]=[]
@@ -254,5 +259,26 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 	key = list(r.db("line_notify_funny").table("searchdata").get_field("id").run(conn))-searchproductmomo.keys()-searchproductpchome.keys()
 	for i in key:
 		print(i,r.db("line_notify_funny").table("searchdata").get(i).delete().run(conn))
-	print("finish")
+	#處理 uniqliprod
+	print("uniqliprod length:",len(uniqliprod))
+	for i in uniqliprod:
+		try:
+			print(i,end=" ")
+			money = dlib.uniqlo(i)
+			if money == "未販售":
+				print("未販售")
+				continue
+			for data in uniqliprod[i]:  #取出有監控這個產品的人做比較
+				if data["product"][0] > money:
+					if data.get("intervalarr") == None:
+						data["intervalarr"] = {}
+					if datetime.strptime(data["starttime"],"%p %I:%M:%S").time() < datetime.now().time() and datetime.now().time() < datetime.strptime(data["endtime"],"%p %I:%M:%S").time():
+						sendtext = "現在價格:"+str(money)+" \r\n已達到設定的條件："+" ".join(str(i) for i in data["product"])
+						data["intervalarr"] = dlib.intervalcheck(data,i,data["id"],sendtext)
+						r.db("line_notify_funny").table("data").get(data["id"]).update({"intervalarr":data["intervalarr"]}).run(conn)
+			print("")
+		except Exception as ex:
+			print("uniqliprod parser:",ex)
+			traceback.print_tb(sys.exc_info()[2])
+			pass
 print("time:",(datetime.now()-sysstarttime).total_seconds(),"秒")
