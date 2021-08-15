@@ -97,3 +97,22 @@ def intervalcheck(data,i,lineid,sendtext): #判斷是否發訊息,並回傳存�
 	if  data["intervalarr"].get(i) >= data["interval"]:
 		data["intervalarr"][i] = 0
 	return data["intervalarr"]
+
+
+def uniqlo(url):
+	key = url.split("/")[-1]
+	res = requests.get("https://www.uniqlo.com/tw/store/goods/%s"%key,headers=headers)
+	print("search:",key,res,end=" ")
+	searchword = "<script> var JSON_DATA = "
+	momotop = res.text.find(searchword)
+	if momotop == -1:
+		return "未販售"
+	momolast = res.text.index(";</script>",momotop)
+	js = json.loads(res.text[momotop+len(searchword):momolast])
+	js = js["GoodsInfo"]["goods"]["l2GoodsList"]
+	price = 9999999999
+	for i in js:
+		if price > int(js[i]["L2GoodsInfo"]["cSalesPrice"]):
+			price =int(js[i]["L2GoodsInfo"]["cSalesPrice"])
+	print(str(price),end = " ")
+	return price
