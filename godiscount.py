@@ -62,6 +62,9 @@ with r.connect( "localhost", 28015) as conn: #google excel處理
 									searchproduct.append(["searchmomo"," ".join(temp[1:])])
 								elif temp[0] == "searchpchome":
 									searchproduct.append(["searchpchome"," ".join(temp[1:])])
+								elif temp[0] == "searchptt":
+									#searchproduct.append(["searchptt"," ".join(temp[1:])])
+									pass
 								else:
 									price = int(temp[0])
 									url = temp[1]
@@ -124,9 +127,11 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 	print("do parser")
 	searchproductmomo = {}
 	searchproductpchome = {}
+	searchptt = {}
 	pchomeprod = {}
 	momoproduct = {}
 	uniqliprod = {}
+	anotherproduct = [] #放一些額外添加的網址做單筆，以後量大再做匯集優化
 	for i in r.db("line_notify_funny").table("data").run(conn):
 		for j in i["product"]:
 			temp = i.copy()
@@ -143,16 +148,22 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 				if j[1] not in uniqliprod.keys():
 					uniqliprod[j[1]]=[]
 				uniqliprod[j[1]].append(temp)
+			if "https://buy.mi.com/tw/item/" in j[1] or "https://shopee.tw/product/" in j[1] or "https://www.watsons.com.tw/" in j[1]:
+				anotherproduct.append([j[1],temp])
 		for j in i["searchproduct"]:
 			if j[1] not in searchproductmomo.keys() and j[0] == "searchmomo":
 				searchproductmomo[j[1]]=[]
 			if j[1] not in searchproductpchome.keys() and j[0] == "searchpchome":
 				searchproductpchome[j[1]] = []
+			if j[1] not in searchptt.keys() and j[0] == "searchptt":
+				searchptt[j[1]] = []
 			temp = i.copy()
 			if j[0] == "searchmomo":
 				searchproductmomo[j[1]].append(temp)
 			if j[0] == "searchpchome":
 				searchproductpchome[j[1]].append(temp)
+			if j[0] == "searchptt":
+				searchptt[j[1]].append(temp)
 	#處理pchome
 	print("pchomeprod length:",len(pchomeprod))
 	result = dlib.pchomemulti(pchomeprod.keys())
@@ -254,11 +265,6 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 			print("search parser:",ex)
 			traceback.print_tb(sys.exc_info()[2])
 			pass
-	#清除沒有需要搜尋的key
-	print("clean search data")
-	key = list(r.db("line_notify_funny").table("searchdata").get_field("id").run(conn))-searchproductmomo.keys()-searchproductpchome.keys()
-	for i in key:
-		print(i,r.db("line_notify_funny").table("searchdata").get(i).delete().run(conn))
 	#處理 uniqliprod
 	print("uniqliprod length:",len(uniqliprod))
 	for i in uniqliprod:
@@ -279,6 +285,68 @@ with r.connect( "localhost", 28015) as conn: #爬蟲gogo
 			print("")
 		except Exception as ex:
 			print("uniqliprod parser:",ex)
+			traceback.print_tb(sys.exc_info()[2])
+			pass
+	#處理 ptt
+	"""print("ptt length:",len(searchptt))
+	for i in searchptt:
+		try:
+			print(i,end=" ")
+			result = dlib.pttparser(i)
+			dbresult = r.db("line_notify_funny").table("searchdata").get(i).run(conn)
+			if dbresult == None: #第一次建立資料 不發通知
+				r.db("line_notify_funny").table("searchdata").insert({"id":i,"data":result}).run(conn)
+			else:
+				diffset = set(list(result.keys())) - set(list(dbresult["data"].keys()))
+				sendmsg = ""
+				for diff in diffset:
+					sendmsg += "新增項目："+result[diff]["name"] + "\r\n 網址: https://24h.pchome.com.tw/prod/"+diff +"\r\n"
+				if len(diffset) != 0:
+					for data in searchproductpchome[i]:
+						if data.get("intervalarr") == None:
+							data["intervalarr"] = {}
+						if datetime.strptime(data["starttime"],"%p %I:%M:%S").time() < datetime.now().time() and datetime.now().time() < datetime.strptime(data["endtime"],"%p %I:%M:%S").time():
+							data["intervalarr"] = dlib.intervalcheck(data,i,data["id"],sendmsg)
+							r.db("line_notify_funny").table("data").get(data["id"]).update({"intervalarr":data["intervalarr"]}).run(conn)
+					r.db("line_notify_funny").table("searchdata").get(i).update({"data":result}).run(conn)
+		except Exception as ex:
+			print("search parser:",ex)
+			traceback.print_tb(sys.exc_info()[2])
+			pass
+	"""
+	#清除沒有需要搜尋的key
+	print("clean search data")
+	key = list(r.db("line_notify_funny").table("searchdata").get_field("id").run(conn))-searchproductmomo.keys()-searchproductpchome.keys()-searchptt.keys()
+	for i in key:
+		print(i,r.db("line_notify_funny").table("searchdata").get(i).delete().run(conn))
+	#anotherproduct 搜尋多的產品 通用型
+	print("anotherproduct length:",len(anotherproduct)) 
+	for i in anotherproduct:
+		try:
+			print(i[0],end=" ")
+			#一律只拿回金額
+			if "https://buy.mi.com/tw/item/" in i[0]: 
+				money = dlib.migo(i[0].split("/")[-1])
+			if "https://shopee.tw/product/" in i[0]:
+				money = dlib.shopee(i[0])
+			if "https://www.watsons.com.tw/" in i[0]:
+				money = dlib.watsons(i[0])
+			if money == "未販售":
+				print("未販售")
+				continue
+			else:
+				print(money,end=" ")
+			data = i[1] #取出有監控這個產品的人做比較
+			if data["product"][0] > money:
+				if data.get("intervalarr") == None:
+					data["intervalarr"] = {}
+				if datetime.strptime(data["starttime"],"%p %I:%M:%S").time() < datetime.now().time() and datetime.now().time() < datetime.strptime(data["endtime"],"%p %I:%M:%S").time():
+					sendtext = "現在價格:"+str(money)+" \r\n已達到設定的條件："+" ".join(str(i) for i in data["product"])
+					data["intervalarr"] = dlib.intervalcheck(data,i[0],data["id"],sendtext)
+					r.db("line_notify_funny").table("data").get(data["id"]).update({"intervalarr":data["intervalarr"]}).run(conn)
+			print("")
+		except Exception as ex:
+			print("anotherproduct parser:",ex)
 			traceback.print_tb(sys.exc_info()[2])
 			pass
 print("time:",(datetime.now()-sysstarttime).total_seconds(),"秒")
