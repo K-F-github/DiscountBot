@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import time
 import json
+from urllib.parse import unquote
 headers = {"user-agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36"}
 pchomesession = requests.Session()
 pchomesession.get("https://shopping.pchome.com.tw/",headers=headers)
@@ -84,8 +85,9 @@ def pchomeseatch(key):
 	req =  pchomesession.get("https://ecshweb.pchome.com.tw/search/v3.3/all/results?q=%s&page=1&sort=sale/dc"%key,headers=headers)
 	print("search:",key,req)
 	data = {}
-	for i in json.loads(req.text)["prods"]:
-		data[i["Id"]] = i
+	if json.loads(req.text).get("prods") != None:
+		for i in json.loads(req.text).get("prods"):
+			data[i["Id"]] = i
 	return data
 	
 def intervalcheck(data,i,lineid,sendtext): #判斷是否發訊息,並回傳存入至db的值
@@ -116,3 +118,79 @@ def uniqlo(url):
 			price =int(js[i]["L2GoodsInfo"]["cSalesPrice"])
 	print(str(price),end = " ")
 	return price
+
+def migo(item):
+	res = requests.post("https://go.buy.mi.com/tw/comment/reviewheader",data={"from":"pc","commodity_id":item})
+	print("search:",item,res,end=" ")
+	js = json.loads(res.text)
+	try:
+		return int(js["data"]["commodity"]["price"])
+	except:
+		return "未販售"
+
+def shopee(item):
+	res = requests.get("https://shopee.tw/api/v4/item/get",params={"itemid":item.split("/")[-1].split("?")[0],"shopid":item.split("/")[-2]})
+	print("search:",item,res,end=" ")
+	js = json.loads(res.text)
+	try:
+		return int(int(js["data"]["price"])/100000)
+	except:
+		return "未販售"
+
+def pttparser(urlid,recommend=None,q=None):
+	#headers = {'Cookie':'over18=1'}
+	params = ""
+	data = {}
+	url = "https://www.ptt.cc/bbs/%s/index.html"%(urlid)
+	if recommend != None or q != None:
+		if recommend != None:
+			params = "recommend%3A"+recommend
+		if q != None:
+			params = "%s"%q
+		if recommend != None and q != None:
+			params = "recommend%3A"+recommend
+			params += "+"+"+".join(q)
+	if params != "":
+		urlarr=[]
+		for i in range(3):
+			urlarr.append("https://www.ptt.cc/bbs/%s/search?page=%s&q=%s"%(urlid,i+1,params))
+		for i in urlarr:
+			res = requests.get(i, cookies={'over18': '1'})
+				
+	else:
+		url = "https://www.ptt.cc/bbs/%s/index.html"%(urlid)
+		for i in range(3):
+			res = requests.get(url, cookies={'over18': '1'})
+			if res.status_code == 200:
+				Soup = BeautifulSoup(res.text,"html5lib")
+				url = "https://www.ptt.cc"+Soup.select("#action-bar-container .btn-group-paging a")[1].attrs["href"]
+				pttdata(res.text)
+			print(res)
+
+def pttdata(data):
+	Soup = BeautifulSoup(data,"html5lib")
+	result = {}
+	for i in Soup.find_all(class_="r-ent"):
+		if len(i.select("span")) != 0:
+			grade = i.find("span").text
+		else:
+			grade = 0
+		if len(i.select("a")) != 0:
+			title = i.select("a")[0].text
+			url = "https://www.ptt.cc"+i.select("a")[0].attrs["href"]
+			result[url] = {}
+			result[url]["grade"] = grade
+			result[url]["title"] = title
+	return result
+
+def watsons(url):
+	url = url.replace("https://www.watsons.com.tw/","").split("/")[:3]
+	res = requests.get("https://www.watsons.com.tw/%s"%"/".join(url),headers=headers)
+	print("search:",unquote(url[0]),res,end=" ")
+	try:
+		toptxt = "<div class=\"productPrice ng-star-inserted\">"
+		top = res.text.index(toptxt)
+		last = res.text.index("<",top+len(toptxt))
+		return int(res.text[top:last].replace(toptxt,"").replace("$","").strip())
+	except:
+		return "未販售"
