@@ -164,8 +164,8 @@ def pttparser(urlid,recommend=None,q=None):
 			if res.status_code == 200:
 				Soup = BeautifulSoup(res.text,"html5lib")
 				url = "https://www.ptt.cc"+Soup.select("#action-bar-container .btn-group-paging a")[1].attrs["href"]
-				pttdata(res.text)
-			print(res)
+				data.update(pttdata(res.text))
+	return data
 
 def pttdata(data):
 	Soup = BeautifulSoup(data,"html5lib")
@@ -192,5 +192,41 @@ def watsons(url):
 		top = res.text.index(toptxt)
 		last = res.text.index("<",top+len(toptxt))
 		return int(res.text[top:last].replace(toptxt,"").replace("$","").strip())
+	except:
+		return "未販售"
+
+def yahooshop(url):
+	res = requests.get("https://tw.buy.yahoo.com/gdsale/%s"%url.replace("https://tw.buy.yahoo.com/gdsale/","").split("/")[0],headers=headers)
+	try:
+		toptxt = "<script type=\"application/ld+json\">"
+		top = res.text.index(toptxt)
+		last = res.text.index("</script>",top+len(toptxt))
+		js = json.loads(unquote(res.text[top:last].replace(toptxt,"")))
+		print("search:",js[0]["name"],res,end=" ")
+		return int(js[0]["offers"]["price"])
+	except:
+		return "未販售"
+
+def lativ(url):
+	res = requests.get("https://www.lativ.com.tw/Detail/%s"%url.replace("https://www.lativ.com.tw/Detail/","").split("/")[0],headers=headers)
+	try:
+		toptxt = "<script type=\"application/ld+json\">"
+		top = res.text.index(toptxt)
+		last = res.text.index("</script>",top+len(toptxt))
+		js = json.loads(unquote(res.text[top:last].replace(toptxt,"")))
+		print("search:",js["name"],res,end=" ")
+		return int(js["offers"]["price"])
+	except:
+		return "未販售"
+	
+def etmall(url):
+	res = requests.get("https://www.etmall.com.tw/i/%s"%url.replace("https://www.etmall.com.tw/i/","").split("/")[0],headers=headers)
+	try:
+		toptxt = "var ViewBag = "
+		top = res.text.index(toptxt)
+		last = res.text.index(";",top+len(toptxt))
+		js = json.loads(unquote(res.text[top:last].replace(toptxt,"")))
+		print("search:",js["TracingData"]["Name"],res,end=" ")
+		return int(js["TracingData"]["SalePrice"])
 	except:
 		return "未販售"
